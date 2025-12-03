@@ -39,4 +39,3 @@ variable "project_name" {
   type        = string
   default     = "terraform-ha-webapp"
 }
-x
