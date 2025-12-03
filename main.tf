@@ -13,7 +13,11 @@ provider "aws" {
   region = var.aws_region
 }
 
-# VPC
+# -------------------------
+# Networking
+# -------------------------
+
+# VPC 10.0.0.0/16
 resource "aws_vpc" "main" {
   cidr_block           = var.vpc_cidr
   enable_dns_support   = true
@@ -24,7 +28,7 @@ resource "aws_vpc" "main" {
   }
 }
 
-# Internet Gateway for public access
+# Internet Gateway for public subnets
 resource "aws_internet_gateway" "igw" {
   vpc_id = aws_vpc.main.id
 
@@ -33,9 +37,10 @@ resource "aws_internet_gateway" "igw" {
   }
 }
 
-# Public subnets in two AZs
+# Use two availability zones in the chosen region
 data "aws_availability_zones" "available" {}
 
+# Public subnets (10.0.1.0/24 and 10.0.2.0/24) [file:13]
 resource "aws_subnet" "public" {
   count                   = 2
   vpc_id                  = aws_vpc.main.id
@@ -48,7 +53,7 @@ resource "aws_subnet" "public" {
   }
 }
 
-# Private subnets in two AZs (for future use / best practice)
+# Private subnets (10.0.10.0/24 and 10.0.20.0/24) [file:13]
 resource "aws_subnet" "private" {
   count             = 2
   vpc_id            = aws_vpc.main.id
@@ -60,12 +65,12 @@ resource "aws_subnet" "private" {
   }
 }
 
-# Public route table with default route to Internet Gateway
+# Route table for public subnets – correct 0.0.0.0/0 route (fixing the weak /24 example). [file:13]
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
 
   route {
-    cidr_block = "0.0.0.0/0" # full internet, not /24 as in the weak example
+    cidr_block = "0.0.0.0/0"
     gateway_id = aws_internet_gateway.igw.id
   }
 
@@ -74,14 +79,18 @@ resource "aws_route_table" "public" {
   }
 }
 
-# Associate public subnets to public route table
+# Associate both public subnets with public route table
 resource "aws_route_table_association" "public" {
   count          = length(aws_subnet.public)
   subnet_id      = aws_subnet.public[count.index].id
   route_table_id = aws_route_table.public.id
 }
 
-# Security group for ALB - internet facing HTTP
+# -------------------------
+# Security groups
+# -------------------------
+
+# ALB security group – HTTP from internet
 resource "aws_security_group" "alb_sg" {
   name        = "${var.project_name}-alb-sg"
   description = "Allow HTTP from the internet to ALB"
@@ -99,8 +108,7 @@ resource "aws_security_group" "alb_sg" {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"
-    ]
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   tags = {
@@ -108,7 +116,7 @@ resource "aws_security_group" "alb_sg" {
   }
 }
 
-# Security group for web servers - only ALB can reach HTTP
+# Web server SG – only HTTP from ALB, egress open for updates
 resource "aws_security_group" "web_sg" {
   name        = "${var.project_name}-web-sg"
   description = "Allow HTTP from ALB to web servers"
@@ -136,7 +144,11 @@ resource "aws_security_group" "web_sg" {
   }
 }
 
-# Web servers: 2 instances, one per public subnet
+# -------------------------
+# AMI and EC2 instances
+# -------------------------
+
+# Amazon Linux 2 AMI in chosen region
 data "aws_ami" "amazon_linux" {
   most_recent = true
 
@@ -144,10 +156,16 @@ data "aws_ami" "amazon_linux" {
 
   filter {
     name   = "name"
-    values = ["al2023-ami-kernel-*-x86_64"]
+    values = ["amzn2-ami-hvm-*-x86_64-gp2"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
   }
 }
 
+# Two web servers – one per public subnet [file:13]
 resource "aws_instance" "web" {
   count         = 2
   ami           = data.aws_ami.amazon_linux.id
@@ -164,7 +182,10 @@ resource "aws_instance" "web" {
   }
 }
 
+# -------------------------
 # Application Load Balancer
+# -------------------------
+
 resource "aws_lb" "app_alb" {
   name               = "${var.project_name}-alb"
   internal           = false
@@ -177,12 +198,12 @@ resource "aws_lb" "app_alb" {
   }
 }
 
-# Target group for web servers
 resource "aws_lb_target_group" "web_tg" {
   name     = "${var.project_name}-tg"
   port     = 80
   protocol = "HTTP"
   vpc_id   = aws_vpc.main.id
+  target_type = "instance"
 
   health_check {
     path                = "/"
@@ -198,7 +219,6 @@ resource "aws_lb_target_group" "web_tg" {
   }
 }
 
-# Listener for ALB
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.app_alb.arn
   port              = 80
@@ -210,7 +230,6 @@ resource "aws_lb_listener" "http" {
   }
 }
 
-# Attach web instances to target group
 resource "aws_lb_target_group_attachment" "web" {
   count            = length(aws_instance.web)
   target_group_arn = aws_lb_target_group.web_tg.arn
