@@ -31,7 +31,7 @@ variable "instance_type" {
 variable "key_name" {
   description = "Existing EC2 key pair name for SSH access"
   type        = string
-  default     = ""
+  default     = "main"
 }
 
 variable "project_name" {
