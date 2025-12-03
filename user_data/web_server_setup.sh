@@ -25,3 +25,6 @@ cat <<EOF >/usr/share/nginx/html/index.html
   </body>
 </html>
 EOF
+
+systemctl reload nginx 
+systemctl restart nginx
