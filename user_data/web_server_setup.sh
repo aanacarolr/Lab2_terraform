@@ -1,10 +1,13 @@
 #!/bin/bash
 set -xe
 
-# Install nginx on Amazon Linux 2023
-dnf update -y
-dnf install -y nginx
+# Update packages and install nginx from Amazon Linux Extras
+yum clean all
+yum update -y
+amazon-linux-extras enable nginx1
+yum install -y nginx
 
+# Enable and start nginx service
 systemctl enable nginx
 systemctl start nginx
 
@@ -17,14 +20,14 @@ cat <<EOF >/usr/share/nginx/html/index.html
     <title>Terraform HA Web App</title>
   </head>
   <body>
-    <h1>Terraform Assignment 2025</h1>
+    <h1>Terraform Assignment Lab2</h1>
     <p>Deployed with Terraform in two availability zones.</p>
-    <p>Student: Ana Carolina Raulino (LNUMBER_HERE)</p>
+    <p>Student: Ana Carolina Raulino </p>
     <p>Instance ID: ${INSTANCE_ID}</p>
     <p>Availability Zone: ${AZ}</p>
   </body>
 </html>
 EOF
 
-systemctl reload nginx 
+# Restart nginx to ensure new index is served
 systemctl restart nginx
