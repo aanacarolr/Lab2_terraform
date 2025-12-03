@@ -17,7 +17,7 @@ provider "aws" {
 # Networking
 # -------------------------
 
-# VPC 10.0.0.0/16
+# VPC 10.0.0.0/16 [file:13]
 resource "aws_vpc" "main" {
   cidr_block           = var.vpc_cidr
   enable_dns_support   = true
@@ -53,7 +53,7 @@ resource "aws_subnet" "public" {
   }
 }
 
-# Private subnets (10.0.10.0/24 and 10.0.20.0/24) [file:13]
+# Private subnets (10.0.10.0/24 and 10.0.20.0/24) for EKS nodes [file:13]
 resource "aws_subnet" "private" {
   count             = 2
   vpc_id            = aws_vpc.main.id
@@ -65,7 +65,7 @@ resource "aws_subnet" "private" {
   }
 }
 
-# Route table for public subnets – correct 0.0.0.0/0 route (fixing the weak /24 example). [file:13]
+# Route table for public subnets – correct 0.0.0.0/0 route (fixing the weak /24 example) [file:13]
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
 
@@ -84,6 +84,52 @@ resource "aws_route_table_association" "public" {
   count          = length(aws_subnet.public)
   subnet_id      = aws_subnet.public[count.index].id
   route_table_id = aws_route_table.public.id
+}
+
+# -------------------------
+# NAT Gateway for private subnets (EKS nodes internet access)
+# -------------------------
+
+resource "aws_eip" "nat_eip" {
+  vpc = true
+
+  tags = {
+    Name = "${var.project_name}-nat-eip"
+  }
+
+  depends_on = [aws_internet_gateway.igw]
+}
+
+resource "aws_nat_gateway" "nat_gw" {
+  allocation_id = aws_eip.nat_eip.id
+  subnet_id     = aws_subnet.public[0].id  # NAT in first public subnet
+
+  tags = {
+    Name = "${var.project_name}-nat-gw"
+  }
+
+  depends_on = [aws_internet_gateway.igw]
+}
+
+# Private route table - routes 0.0.0.0/0 to NAT Gateway for EKS nodes
+resource "aws_route_table" "private" {
+  vpc_id = aws_vpc.main.id
+
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.nat_gw.id
+  }
+
+  tags = {
+    Name = "${var.project_name}-private-rt"
+  }
+}
+
+# Associate private subnets with private route table
+resource "aws_route_table_association" "private" {
+  count          = length(aws_subnet.private)
+  subnet_id      = aws_subnet.private[count.index].id
+  route_table_id = aws_route_table.private.id
 }
 
 # -------------------------
