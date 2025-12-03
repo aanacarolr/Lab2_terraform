@@ -28,3 +28,25 @@ ALB SG: HTTP(80) ← 0.0.0.0/0 → HTTP(80) → Web SG Web SG: HTTP(80) ← AL
 - 2 EC2 (t3.micro) in public subnets, 1 per AZ
 - Amazon Linux 2 AMI with nginx via `amazon-linux-extras`
 - Custom index.html with student name + instance metadata
+
+### Steps
+- terraform init 
+- terraform plan
+- terraform apply
+
+EKS pods can reach frontend via ALB DNS with NAT outbound.
+
+## Continuous Improvement (Git History)
+- PR1: Basic VPC + public subnets
+- PR2: Web servers + nginx user_data
+- PR3: ALB + security groups + target groups
+- PR4: NAT Gateway + private route table (EKS ready)
+- PR5: .gitignore + code cleanup
+
+## Key Learnings
+- Route table `0.0.0.0/0` vs weak `/24` example [file:13]
+- Amazon Linux Extras for nginx (`amazon-linux-extras install nginx1`)
+- Least-privilege SGs (ALB→Web, not world)
+- NAT Gateway pattern for private EKS nodes 
+
+
